@@ -1,0 +1,121 @@
+import:
+    java.util.Map
+    ch.njol.skript.variables.Variables
+    ch.njol.skript.lang.VariableString
+    ch.njol.skript.util.StringMode
+
+local function evKey(mark: number, str: string, var: object, event: object, custom: object) :: objects:
+    if {_mark} is 2:
+        set {_vs} to {_var}.getName()
+        set {_local} to {_var}.isLocal()
+        set {_list} to {_var}.isList()
+    else:
+        set {_n} to {_str}
+        set {_local} to false
+        if {_n} starts with "_":
+            set {_local} to true
+            set {_n} to {_n}.substring(1)
+        set {_vs} to VariableString.newInstance({_n}, StringMode.VARIABLE_NAME)
+        set {_list} to false
+        if {_str} ends with "::*":
+            set {_list} to true
+    set {_ev} to {_event}
+    if {_custom} is set:
+        set {_ev} to {_custom}
+    set {_ret::1} to {_vs}.toUnformattedString({_ev})
+    set {_ret::2} to {_local}
+    set {_ret::3} to {_list}
+    set {_ret::4} to {_ev}
+    return {_ret::*}
+
+local function evGet(mark: number, str: string, var: object, event: object, custom: object) :: objects:
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    set {_value} to Variables.getVariable({_k::1}, {_k::4}, {_k::2})
+    if {_value} is instance of Map:
+        loop ...{_value}.entrySet():
+            set {_entry} to loop-value
+            set {_out::%{_entry}.getKey()%} to {_entry}.getValue()
+        return {_out::*}
+    return {_value}
+
+local function evSet(mark: number, str: string, var: object, event: object, custom: object, values: objects):
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    set {_name} to {_k::1}
+    if any:
+        {_k::3} is true
+        {_name} ends with "::*"
+    then:
+        set {_base} to {_name}.substring(0, {_name}.length() - 3)
+        Variables.setVariable("%{_base}%::*", null, {_k::4}, {_k::2})
+        set {_i} to 1
+        loop {_values::*}:
+            Variables.setVariable("%{_base}%::%{_i}%", loop-value, {_k::4}, {_k::2})
+            add 1 to {_i}
+    else:
+        Variables.setVariable({_name}, {_values::1}, {_k::4}, {_k::2})
+
+local function evAdd(mark: number, str: string, var: object, event: object, custom: object, values: objects):
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    set {_name} to {_k::1}
+    set {_value} to Variables.getVariable({_name}, {_k::4}, {_k::2})
+    if {_value} is instance of Map:
+        set {_base} to {_name}.substring(0, {_name}.length() - 3)
+        set {_i} to {_value}.size() + 1
+        loop {_values::*}:
+            Variables.setVariable("%{_base}%::%{_i}%", loop-value, {_k::4}, {_k::2})
+            add 1 to {_i}
+    else if {_value} is not set:
+        Variables.setVariable({_name}, {_values::1}, {_k::4}, {_k::2})
+    else:
+        Variables.setVariable({_name}, {_value} + {_values::1}, {_k::4}, {_k::2})
+
+local function evRemove(mark: number, str: string, var: object, event: object, custom: object, values: objects):
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    set {_name} to {_k::1}
+    set {_value} to Variables.getVariable({_name}, {_k::4}, {_k::2})
+    if {_value} is instance of Map:
+        set {_base} to {_name}.substring(0, {_name}.length() - 3)
+        set {_done} to false
+        loop ...{_value}.entrySet():
+            set {_entry} to loop-value
+            if {_done} is false:
+                if {_values::*} contains {_entry}.getValue():
+                    Variables.setVariable("%{_base}%::%{_entry}.getKey()%", null, {_k::4}, {_k::2})
+                    set {_done} to true
+    else:
+        Variables.setVariable({_name}, {_value} - {_values::1}, {_k::4}, {_k::2})
+
+local function evRemoveAll(mark: number, str: string, var: object, event: object, custom: object, values: objects):
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    set {_name} to {_k::1}
+    set {_value} to Variables.getVariable({_name}, {_k::4}, {_k::2})
+    if {_value} is instance of Map:
+        set {_base} to {_name}.substring(0, {_name}.length() - 3)
+        loop ...{_value}.entrySet():
+            set {_entry} to loop-value
+            if {_values::*} contains {_entry}.getValue():
+                Variables.setVariable("%{_base}%::%{_entry}.getKey()%", null, {_k::4}, {_k::2})
+
+local function evDelete(mark: number, str: string, var: object, event: object, custom: object):
+    set {_k::*} to evKey({_mark}, {_str}, {_var}, {_event}, {_custom})
+    Variables.setVariable({_k::1}, null, {_k::4}, {_k::2})
+
+expression (1:variable %-string%|2:%$-objects%) with custom-event [%-object%]:
+    parse:
+        if parse mark is 2:
+            set {_evv::var} to expr-2
+        continue
+    get:
+        return evGet(parse mark, expr-1, {_evv::var}, event, expr-3)
+    set:
+        evSet(parse mark, expr-1, {_evv::var}, event, expr-3, change values)
+    add:
+        evAdd(parse mark, expr-1, {_evv::var}, event, expr-3, change values)
+    remove:
+        evRemove(parse mark, expr-1, {_evv::var}, event, expr-3, change values)
+    remove all:
+        evRemoveAll(parse mark, expr-1, {_evv::var}, event, expr-3, change values)
+    delete:
+        evDelete(parse mark, expr-1, {_evv::var}, event, expr-3)
+    reset:
+        evDelete(parse mark, expr-1, {_evv::var}, event, expr-3)
