@@ -70,6 +70,14 @@ test "variable list remove all":
     assert {_list::1} is not "a" with "list remove all removes first"
     assert {_list::3} is not "a" with "list remove all removes duplicates"
 
+test "variable string list remove all":
+    set variable "string-removeall::*" with custom-event to "a", "b", "a", "c"
+    remove all "a" from variable "string-removeall::*" with custom-event
+    assert variable "string-removeall::1" with custom-event is not set with "string remove all removes first match"
+    assert variable "string-removeall::2" with custom-event is "b" with "string remove all keeps non-matching entry"
+    assert variable "string-removeall::3" with custom-event is not set with "string remove all removes duplicate match"
+    assert variable "string-removeall::4" with custom-event is "c" with "string remove all keeps last non-matching entry"
+
 test "variable list delete":
     set {_list::*} to "x", "y"
     delete {_list::*} with custom-event
